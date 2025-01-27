@@ -32,8 +32,8 @@
 
                     return sessionData.user;
                 } catch (e) {
-                    console.error('Storage access error:', e);
-                    return null;
+                    console.warn('Storage access is restricted:', e);
+                    return null; // Return null if storage is inaccessible
                 }
             },
 
@@ -45,7 +45,7 @@
                     };
                     localStorage.setItem('adaptivemath_session', JSON.stringify(sessionData));
                 } catch (e) {
-                    console.error('Failed to save session:', e);
+                    console.warn('Failed to save session due to restricted storage:', e);
                 }
             },
 
@@ -53,7 +53,7 @@
                 try {
                     localStorage.removeItem('adaptivemath_session');
                 } catch (e) {
-                    console.error('Failed to clear session:', e);
+                    console.warn('Failed to clear session due to restricted storage:', e);
                 }
             }
         };
@@ -68,8 +68,8 @@
                     localStorage.setItem(key, compressed);
                     return true;
                 } catch (e) {
-                    console.error('Failed to save data:', e);
-                    return false;
+                    console.warn('Failed to save data due to restricted storage:', e);
+                    return false; // Indicate failure to save
                 }
             },
 
@@ -79,8 +79,8 @@
                     const data = localStorage.getItem(key);
                     return data ? JSON.parse(data) : null;
                 } catch (e) {
-                    console.error('Failed to load data:', e);
-                    return null;
+                    console.warn('Failed to load data due to restricted storage:', e);
+                    return null; // Return null if storage is inaccessible
                 }
             },
 
@@ -95,7 +95,7 @@
                                 localStorage.removeItem(key);
                             }
                         } catch (e) {
-                            console.error('Failed to clear old data:', e);
+                            console.warn('Failed to clear old data:', e);
                             localStorage.removeItem(key);
                         }
                     }
