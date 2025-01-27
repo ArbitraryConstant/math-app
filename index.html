@@ -16,139 +16,362 @@
 <body>
     <div id="root"></div>
     <script type="text/babel">
-        const MemoryStorage = {
-            data: {},
-
-            setItem: (key, value) => {
-                MemoryStorage.data[key] = value;
-            },
-
-            getItem: (key) => {
-                return MemoryStorage.data[key] || null;
-            },
-
-            removeItem: (key) => {
-                delete MemoryStorage.data[key];
-            },
-
-            clear: () => {
-                MemoryStorage.data = {};
-            }
-        };
-
-        const SafeStorage = {
-            setItem: (key, value) => {
-                try {
-                    localStorage.setItem(key, value);
-                } catch (e) {
-                    MemoryStorage.setItem(key, value);
-                }
-            },
-
-            getItem: (key) => {
-                try {
-                    return localStorage.getItem(key);
-                } catch (e) {
-                    return MemoryStorage.getItem(key);
-                }
-            },
-
-            removeItem: (key) => {
-                try {
-                    localStorage.removeItem(key);
-                } catch (e) {
-                    MemoryStorage.removeItem(key);
-                }
-            },
-
-            clear: () => {
-                try {
-                    localStorage.clear();
-                } catch (e) {
-                    MemoryStorage.clear();
-                }
-            }
-        };
-
-        const Storage = SafeStorage;
+        const { useState, useEffect } = React;
 
         const SessionManager = {
             checkSession: () => {
+                const session = localStorage.getItem('adaptivemath_session');
+                if (!session) return null;
                 try {
-                    const session = Storage.getItem('adaptivemath_session');
-                    if (!session) return null;
-
                     const sessionData = JSON.parse(session);
                     const now = new Date().getTime();
-
                     if (now - sessionData.timestamp > 24 * 60 * 60 * 1000) {
-                        Storage.removeItem('adaptivemath_session');
+                        localStorage.removeItem('adaptivemath_session');
                         return null;
                     }
-
                     return sessionData.user;
                 } catch (e) {
-                    console.warn('Session check failed:', e);
                     return null;
                 }
             },
-
             createSession: (user) => {
-                try {
-                    const sessionData = {
-                        user,
-                        timestamp: new Date().getTime()
-                    };
-                    Storage.setItem('adaptivemath_session', JSON.stringify(sessionData));
-                } catch (e) {
-                    console.warn('Failed to create session:', e);
-                }
+                const sessionData = {
+                    user,
+                    timestamp: new Date().getTime()
+                };
+                localStorage.setItem('adaptivemath_session', JSON.stringify(sessionData));
             },
-
             endSession: () => {
-                try {
-                    Storage.removeItem('adaptivemath_session');
-                } catch (e) {
-                    console.warn('Failed to end session:', e);
-                }
+                localStorage.removeItem('adaptivemath_session');
             }
         };
 
-        const App = () => {
-            const [user, setUser] = React.useState(SessionManager.checkSession());
+        const StorageManager = {
+            getUserKey: (userId, type) => `adaptivemath_${userId}_${type}`,
+            saveData: (userId, type, data) => {
+                const key = StorageManager.getUserKey(userId, type);
+                try {
+                    const compressed = JSON.stringify(data).replace(/\s+/g, '');
+                    localStorage.setItem(key, compressed);
+                    return true;
+                } catch (e) {
+                    if (e.name === 'QuotaExceededError') {
+                        StorageManager.clearOldData();
+                        try {
+                            localStorage.setItem(key, JSON.stringify(data));
+                            return true;
+                        } catch (e2) {
+                            return false;
+                        }
+                    }
+                    return false;
+                }
+            },
+            loadData: (userId, type) => {
+                const key = StorageManager.getUserKey(userId, type);
+                try {
+                    const data = localStorage.getItem(key);
+                    return data ? JSON.parse(data) : null;
+                } catch (e) {
+                    return null;
+                }
+            },
+            clearOldData: () => {
+                const now = new Date().getTime();
+                const keys = Object.keys(localStorage);
+                keys.forEach(key => {
+                    if (key.startsWith('adaptivemath_')) {
+                        try {
+                            const data = JSON.parse(localStorage.getItem(key));
+                            if (data.timestamp && now - data.timestamp > 7 * 24 * 60 * 60 * 1000) {
+                                localStorage.removeItem(key);
+                            }
+                        } catch (e) {
+                            localStorage.removeItem(key);
+                        }
+                    }
+                });
+            }
+        };
 
-            const handleLogin = () => {
-                const mockUser = { id: 'user1', name: 'Test User' };
-                SessionManager.createSession(mockUser);
-                setUser(mockUser);
+        const SUBJECTS = {
+            ALGEBRA_1: {
+                id: 'algebra1',
+                name: 'Algebra 1',
+                topics: ['Linear Equations', 'Inequalities', 'Quadratic Equations']
+            },
+            GEOMETRY: {
+                id: 'geometry',
+                name: 'Geometry',
+                topics: ['Triangles', 'Circles', 'Polygons']
+            }
+        };
+
+        const QuestionGenerator = {
+            cache: new Map(),
+            generateQuestion: (subject, topic) => {
+                const cacheKey = `${subject}_${topic}`;
+                if (QuestionGenerator.cache.has(cacheKey)) {
+                    const cachedQuestions = QuestionGenerator.cache.get(cacheKey);
+                    return cachedQuestions[Math.floor(Math.random() * cachedQuestions.length)];
+                }
+                const questions = {
+                    algebra1: {
+                        'Linear Equations': [
+                            {
+                                text: 'Solve for x: 2x + 3 = 11',
+                                answer: '4',
+                                explanation: 'Subtract 3 from both sides, then divide by 2'
+                            },
+                            {
+                                text: 'Solve for x: 3x - 5 = 7',
+                                answer: '4',
+                                explanation: 'Add 5 to both sides, then divide by 3'
+                            }
+                        ]
+                    }
+                };
+                const subjectQuestions = questions[subject]?.[topic] || [];
+                QuestionGenerator.cache.set(cacheKey, subjectQuestions);
+                return subjectQuestions[Math.floor(Math.random() * subjectQuestions.length)] || {
+                    text: 'Sample question (placeholder)',
+                    answer: '0',
+                    explanation: 'This is a placeholder question'
+                };
+            },
+            clearCache: () => {
+                QuestionGenerator.cache.clear();
+            }
+        };
+
+        const ProgressTracker = {
+            saveProgress: (userId, subject, topic, score) => {
+                const progress = StorageManager.loadData(userId, 'progress') || {};
+                if (!progress[subject]) progress[subject] = {};
+                progress[subject][topic] = score;
+                progress.timestamp = new Date().getTime();
+                StorageManager.saveData(userId, 'progress', progress);
+            },
+            getProgress: (userId) => {
+                return StorageManager.loadData(userId, 'progress') || {};
+            }
+        };
+
+        const PerformanceMonitor = {
+            metrics: new Map(),
+            recordMetric: (userId, metric, value) => {
+                const userMetrics = PerformanceMonitor.metrics.get(userId) || {};
+                userMetrics[metric] = value;
+                PerformanceMonitor.metrics.set(userId, userMetrics);
+                if (PerformanceMonitor.metrics.size > 50) {
+                    const oldestKey = PerformanceMonitor.metrics.keys().next().value;
+                    PerformanceMonitor.metrics.delete(oldestKey);
+                }
+            },
+            getMetrics: (userId) => {
+                return PerformanceMonitor.metrics.get(userId) || {};
+            }
+        };
+
+        function App() {
+            const [user, setUser] = useState(null);
+            const [currentSubject, setCurrentSubject] = useState(null);
+            const [currentTopic, setCurrentTopic] = useState(null);
+            const [currentQuestion, setCurrentQuestion] = useState(null);
+            const [userAnswer, setUserAnswer] = useState('');
+            const [feedback, setFeedback] = useState(null);
+            const [error, setError] = useState(null);
+
+            useEffect(() => {
+                const savedUser = SessionManager.checkSession();
+                if (savedUser) {
+                    setUser(savedUser);
+                }
+                QuestionGenerator.clearCache();
+                StorageManager.clearOldData();
+                return () => {
+                    QuestionGenerator.clearCache();
+                };
+            }, []);
+
+            const handleSignIn = () => {
+                try {
+                    const mockUser = {
+                        id: 'user_' + Math.random().toString(36).substr(2, 9),
+                        name: 'Test User',
+                        email: 'test@example.com',
+                        timestamp: new Date().getTime()
+                    };
+                    SessionManager.createSession(mockUser);
+                    setUser(mockUser);
+                    setError(null);
+                } catch (e) {
+                    setError('Failed to sign in. Please try again.');
+                }
             };
 
-            const handleLogout = () => {
+            const handleSignOut = () => {
                 SessionManager.endSession();
                 setUser(null);
+                setCurrentSubject(null);
+                setCurrentTopic(null);
+                setCurrentQuestion(null);
+                setUserAnswer('');
+                setFeedback(null);
+                setError(null);
             };
 
-            return (
-                <div className="min-h-screen flex items-center justify-center bg-gray-100">
-                    {!user ? (
-                        <div className="text-center">
-                            <h1 className="text-2xl font-bold mb-4">Welcome to AdaptiveMath</h1>
+            const handleSubjectSelect = (subject) => {
+                setCurrentSubject(subject);
+                setCurrentTopic(null);
+                setCurrentQuestion(null);
+                setUserAnswer('');
+                setFeedback(null);
+                PerformanceMonitor.recordMetric(user.id, 'subject_selected', subject.id);
+            };
+
+            const handleTopicSelect = (topic) => {
+                setCurrentTopic(topic);
+                const newQuestion = QuestionGenerator.generateQuestion(currentSubject.id, topic);
+                setCurrentQuestion(newQuestion);
+                setUserAnswer('');
+                setFeedback(null);
+                PerformanceMonitor.recordMetric(user.id, 'topic_selected', topic);
+            };
+
+            const handleAnswerSubmit = () => {
+                if (currentQuestion && userAnswer) {
+                    const isCorrect = userAnswer.trim() === currentQuestion.answer;
+                    setFeedback({
+                        correct: isCorrect,
+                        message: isCorrect ? 'Correct!' : `Incorrect. ${currentQuestion.explanation}`
+                    });
+                    if (isCorrect) {
+                        try {
+                            ProgressTracker.saveProgress(
+                                user.id,
+                                currentSubject.id,
+                                currentTopic,
+                                (ProgressTracker.getProgress(user.id)?.[currentSubject.id]?.[currentTopic] || 0) + 1
+                            );
+                            PerformanceMonitor.recordMetric(user.id, 'question_correct', currentQuestion.text);
+                        } catch (e) {
+                            setError('Failed to save progress. Please try again.');
+                        }
+                    } else {
+                        PerformanceMonitor.recordMetric(user.id, 'question_incorrect', currentQuestion.text);
+                    }
+                }
+            };
+
+            const ErrorMessage = () => error ? (
+                <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4">
+                    {error}
+                </div>
+            ) : null;
+
+            if (!user) {
+                return (
+                    <div className="min-h-screen bg-gray-100 flex items-center justify-center">
+                        <div className="bg-white p-8 rounded-lg shadow-md">
+                            <h1 className="text-2xl font-bold mb-4">AdaptiveMath</h1>
+                            <ErrorMessage />
                             <button
-                                onClick={handleLogin}
-                                className="bg-blue-500 text-white px-4 py-2 rounded"
+                                onClick={handleSignIn}
+                                className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600"
                             >
-                                Log In
+                                Sign In to Start Learning
                             </button>
                         </div>
-                    ) : (
-                        <div className="text-center">
-                            <h1 className="text-2xl font-bold mb-4">Hello, {user.name}!</h1>
+                    </div>
+                );
+            }
+
+            if (!currentSubject) {
+                return (
+                    <div className="min-h-screen bg-gray-100 p-8">
+                        <div className="flex justify-between items-center mb-8">
+                            <h1 className="text-2xl font-bold">Welcome, {user.name}</h1>
                             <button
-                                onClick={handleLogout}
-                                className="bg-red-500 text-white px-4 py-2 rounded"
+                                onClick={handleSignOut}
+                                className="text-red-500 hover:text-red-600"
                             >
-                                Log Out
+                                Sign Out
                             </button>
+                        </div>
+                        <ErrorMessage />
+                        <h2 className="text-xl mb-4">Select a Subject:</h2>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {Object.values(SUBJECTS).map((subject) => (
+                                <button
+                                    key={subject.id}
+                                    onClick={() => handleSubjectSelect(subject)}
+                                    className="bg-white p-6 rounded-lg shadow-md hover:shadow-lg transition-shadow"
+                                >
+                                    <h3 className="text-lg font-semibold">{subject.name}</h3>
+                                    <p className="text-gray-600">{subject.topics.length} topics</p>
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                );
+            }
+
+            return (
+                <div className="min-h-screen bg-gray-100 p-8">
+                    <div className="flex justify-between items-center mb-4">
+                        <button
+                            onClick={() => setCurrentSubject(null)}
+                            className="text-blue-500 hover:text-blue-600"
+                        >
+                            ← Back to Subjects
+                        </button>
+                        <button
+                            onClick={handleSignOut}
+                            className="text-red-500 hover:text-red-600"
+                        >
+                            Sign Out
+                        </button>
+                    </div>
+                    <ErrorMessage />
+                    <h1 className="text-2xl font-bold mb-4">{currentSubject.name}</h1>
+                    {!currentTopic ? (
+                        <div>
+                            <h2 className="text-xl mb-4">Select a Topic:</h2>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                {currentSubject.topics.map((topic) => (
+                                    <button
+                                        key={topic}
+                                        onClick={() => handleTopicSelect(topic)}
+                                        className="bg-white p-6 rounded-lg shadow-md hover:shadow-lg transition-shadow"
+                                    >
+                                        <h3 className="text-lg font-semibold">{topic}</h3>
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    ) : (
+                        <div>
+                            <h2 className="text-xl mb-4">{currentTopic}</h2>
+                            <p className="mb-4">{currentQuestion.text}</p>
+                            <input
+                                type="text"
+                                value={userAnswer}
+                                onChange={(e) => setUserAnswer(e.target.value)}
+                                className="border border-gray-300 p-2 rounded mb-4 w-full"
+                                placeholder="Your answer"
+                            />
+                            <button
+                                onClick={handleAnswerSubmit}
+                                className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600"
+                            >
+                                Submit Answer
+                            </button>
+                            {feedback && (
+                                <p className={`mt-4 ${feedback.correct ? 'text-green-500' : 'text-red-500'}`}>
+                                    {feedback.message}
+                                </p>
+                            )}
                         </div>
                     )}
                 </div>
