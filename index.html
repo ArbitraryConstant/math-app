@@ -16,24 +16,48 @@
 <body>
     <div id="root"></div>
     <script type="text/babel">
+        // In-Memory Storage as a Workaround for Restricted Local Storage
+        const MemoryStorage = {
+            data: {},
+
+            setItem: (key, value) => {
+                MemoryStorage.data[key] = value;
+            },
+
+            getItem: (key) => {
+                return MemoryStorage.data[key] || null;
+            },
+
+            removeItem: (key) => {
+                delete MemoryStorage.data[key];
+            },
+
+            clear: () => {
+                MemoryStorage.data = {};
+            }
+        };
+
+        // Replace Local Storage with Memory Storage
+        const Storage = MemoryStorage;
+
         const SessionManager = {
             checkSession: () => {
                 try {
-                    const session = localStorage.getItem('adaptivemath_session');
+                    const session = Storage.getItem('adaptivemath_session');
                     if (!session) return null;
 
                     const sessionData = JSON.parse(session);
                     const now = new Date().getTime();
 
                     if (now - sessionData.timestamp > 24 * 60 * 60 * 1000) {
-                        localStorage.removeItem('adaptivemath_session');
+                        Storage.removeItem('adaptivemath_session');
                         return null;
                     }
 
                     return sessionData.user;
                 } catch (e) {
-                    console.warn('Storage access is restricted:', e);
-                    return null; // Return null if storage is inaccessible
+                    console.warn('Session check failed:', e);
+                    return null;
                 }
             },
 
@@ -43,68 +67,60 @@
                         user,
                         timestamp: new Date().getTime()
                     };
-                    localStorage.setItem('adaptivemath_session', JSON.stringify(sessionData));
+                    Storage.setItem('adaptivemath_session', JSON.stringify(sessionData));
                 } catch (e) {
-                    console.warn('Failed to save session due to restricted storage:', e);
+                    console.warn('Failed to create session:', e);
                 }
             },
 
             endSession: () => {
                 try {
-                    localStorage.removeItem('adaptivemath_session');
+                    Storage.removeItem('adaptivemath_session');
                 } catch (e) {
-                    console.warn('Failed to clear session due to restricted storage:', e);
+                    console.warn('Failed to end session:', e);
                 }
-            }
-        };
-
-        const StorageManager = {
-            getUserKey: (userId, type) => `adaptivemath_${userId}_${type}`,
-
-            saveData: (userId, type, data) => {
-                const key = StorageManager.getUserKey(userId, type);
-                try {
-                    const compressed = JSON.stringify(data).replace(/\s+/g, '');
-                    localStorage.setItem(key, compressed);
-                    return true;
-                } catch (e) {
-                    console.warn('Failed to save data due to restricted storage:', e);
-                    return false; // Indicate failure to save
-                }
-            },
-
-            loadData: (userId, type) => {
-                const key = StorageManager.getUserKey(userId, type);
-                try {
-                    const data = localStorage.getItem(key);
-                    return data ? JSON.parse(data) : null;
-                } catch (e) {
-                    console.warn('Failed to load data due to restricted storage:', e);
-                    return null; // Return null if storage is inaccessible
-                }
-            },
-
-            clearOldData: () => {
-                const now = new Date().getTime();
-                const keys = Object.keys(localStorage);
-                keys.forEach(key => {
-                    if (key.startsWith('adaptivemath_')) {
-                        try {
-                            const data = JSON.parse(localStorage.getItem(key));
-                            if (data.timestamp && now - data.timestamp > 7 * 24 * 60 * 60 * 1000) {
-                                localStorage.removeItem(key);
-                            }
-                        } catch (e) {
-                            console.warn('Failed to clear old data:', e);
-                            localStorage.removeItem(key);
-                        }
-                    }
-                });
             }
         };
 
         const App = () => {
-            return <h1>Welcome to AdaptiveMath!</h1>;
+            const [user, setUser] = React.useState(SessionManager.checkSession());
+
+            const handleLogin = () => {
+                const mockUser = { id: 'user1', name: 'Test User' };
+                SessionManager.createSession(mockUser);
+                setUser(mockUser);
+            };
+
+            const handleLogout = () => {
+                SessionManager.endSession();
+                setUser(null);
+            };
+
+            return (
+                <div className="min-h-screen flex items-center justify-center bg-gray-100">
+                    {!user ? (
+                        <div className="text-center">
+                            <h1 className="text-2xl font-bold mb-4">Welcome to AdaptiveMath</h1>
+                            <button
+                                onClick={handleLogin}
+                                className="bg-blue-500 text-white px-4 py-2 rounded"
+                            >
+                                Log In
+                            </button>
+                        </div>
+                    ) : (
+                        <div className="text-center">
+                            <h1 className="text-2xl font-bold mb-4">Hello, {user.name}!</h1>
+                            <button
+                                onClick={handleLogout}
+                                className="bg-red-500 text-white px-4 py-2 rounded"
+                            >
+                                Log Out
+                            </button>
+                        </div>
+                    )}
+                </div>
+            );
         };
 
         ReactDOM.render(<App />, document.getElementById('root'));
