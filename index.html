@@ -16,7 +16,6 @@
 <body>
     <div id="root"></div>
     <script type="text/babel">
-        // In-Memory Storage as a Workaround for Restricted Local Storage
         const MemoryStorage = {
             data: {},
 
@@ -37,8 +36,41 @@
             }
         };
 
-        // Replace Local Storage with Memory Storage
-        const Storage = MemoryStorage;
+        const SafeStorage = {
+            setItem: (key, value) => {
+                try {
+                    localStorage.setItem(key, value);
+                } catch (e) {
+                    MemoryStorage.setItem(key, value);
+                }
+            },
+
+            getItem: (key) => {
+                try {
+                    return localStorage.getItem(key);
+                } catch (e) {
+                    return MemoryStorage.getItem(key);
+                }
+            },
+
+            removeItem: (key) => {
+                try {
+                    localStorage.removeItem(key);
+                } catch (e) {
+                    MemoryStorage.removeItem(key);
+                }
+            },
+
+            clear: () => {
+                try {
+                    localStorage.clear();
+                } catch (e) {
+                    MemoryStorage.clear();
+                }
+            }
+        };
+
+        const Storage = SafeStorage;
 
         const SessionManager = {
             checkSession: () => {
