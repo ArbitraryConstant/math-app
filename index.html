@@ -18,8 +18,20 @@
     <script type="text/babel">
         const { useState, useEffect } = React;
 
+        const isStorageAccessible = () => {
+            try {
+                const testKey = '__test__';
+                localStorage.setItem(testKey, testKey);
+                localStorage.removeItem(testKey);
+                return true;
+            } catch (e) {
+                return false;
+            }
+        };
+
         const SessionManager = {
             checkSession: () => {
+                if (!isStorageAccessible()) return null;
                 const session = localStorage.getItem('adaptivemath_session');
                 if (!session) return null;
                 try {
@@ -35,6 +47,7 @@
                 }
             },
             createSession: (user) => {
+                if (!isStorageAccessible()) return;
                 const sessionData = {
                     user,
                     timestamp: new Date().getTime()
@@ -42,6 +55,7 @@
                 localStorage.setItem('adaptivemath_session', JSON.stringify(sessionData));
             },
             endSession: () => {
+                if (!isStorageAccessible()) return;
                 localStorage.removeItem('adaptivemath_session');
             }
         };
@@ -49,6 +63,7 @@
         const StorageManager = {
             getUserKey: (userId, type) => `adaptivemath_${userId}_${type}`,
             saveData: (userId, type, data) => {
+                if (!isStorageAccessible()) return false;
                 const key = StorageManager.getUserKey(userId, type);
                 try {
                     const compressed = JSON.stringify(data).replace(/\s+/g, '');
@@ -68,6 +83,7 @@
                 }
             },
             loadData: (userId, type) => {
+                if (!isStorageAccessible()) return null;
                 const key = StorageManager.getUserKey(userId, type);
                 try {
                     const data = localStorage.getItem(key);
@@ -77,6 +93,7 @@
                 }
             },
             clearOldData: () => {
+                if (!isStorageAccessible()) return;
                 const now = new Date().getTime();
                 const keys = Object.keys(localStorage);
                 keys.forEach(key => {
