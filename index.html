@@ -16,11 +16,94 @@
 <body>
     <div id="root"></div>
     <script type="text/babel">
-        // AdaptiveMath App Code
-        const { useState, useEffect } = React;
+        const SessionManager = {
+            checkSession: () => {
+                try {
+                    const session = localStorage.getItem('adaptivemath_session');
+                    if (!session) return null;
+
+                    const sessionData = JSON.parse(session);
+                    const now = new Date().getTime();
+
+                    if (now - sessionData.timestamp > 24 * 60 * 60 * 1000) {
+                        localStorage.removeItem('adaptivemath_session');
+                        return null;
+                    }
+
+                    return sessionData.user;
+                } catch (e) {
+                    console.error('Storage access error:', e);
+                    return null;
+                }
+            },
+
+            createSession: (user) => {
+                try {
+                    const sessionData = {
+                        user,
+                        timestamp: new Date().getTime()
+                    };
+                    localStorage.setItem('adaptivemath_session', JSON.stringify(sessionData));
+                } catch (e) {
+                    console.error('Failed to save session:', e);
+                }
+            },
+
+            endSession: () => {
+                try {
+                    localStorage.removeItem('adaptivemath_session');
+                } catch (e) {
+                    console.error('Failed to clear session:', e);
+                }
+            }
+        };
+
+        const StorageManager = {
+            getUserKey: (userId, type) => `adaptivemath_${userId}_${type}`,
+
+            saveData: (userId, type, data) => {
+                const key = StorageManager.getUserKey(userId, type);
+                try {
+                    const compressed = JSON.stringify(data).replace(/\s+/g, '');
+                    localStorage.setItem(key, compressed);
+                    return true;
+                } catch (e) {
+                    console.error('Failed to save data:', e);
+                    return false;
+                }
+            },
+
+            loadData: (userId, type) => {
+                const key = StorageManager.getUserKey(userId, type);
+                try {
+                    const data = localStorage.getItem(key);
+                    return data ? JSON.parse(data) : null;
+                } catch (e) {
+                    console.error('Failed to load data:', e);
+                    return null;
+                }
+            },
+
+            clearOldData: () => {
+                const now = new Date().getTime();
+                const keys = Object.keys(localStorage);
+                keys.forEach(key => {
+                    if (key.startsWith('adaptivemath_')) {
+                        try {
+                            const data = JSON.parse(localStorage.getItem(key));
+                            if (data.timestamp && now - data.timestamp > 7 * 24 * 60 * 60 * 1000) {
+                                localStorage.removeItem(key);
+                            }
+                        } catch (e) {
+                            console.error('Failed to clear old data:', e);
+                            localStorage.removeItem(key);
+                        }
+                    }
+                });
+            }
+        };
 
         const App = () => {
-            // Your React application code here
             return <h1>Welcome to AdaptiveMath!</h1>;
         };
 
